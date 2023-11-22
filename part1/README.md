@@ -49,7 +49,7 @@ sequenceDiagram
 
     browser->>server: POST https://studies.cs.helsinki.fi/exampleapp/new_note
     activate server
-    server-->>browser: Response create nota 200
+    server-->>browser: Response 302 create nota
     deactivate server
 
     browser->>server: GET https://studies.cs.helsinki.fi/exampleapp/notes
