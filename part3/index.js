@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
-
 const morgan = require("morgan");
+const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 
 
@@ -17,6 +17,9 @@ morgan.token('body', (req) => JSON.stringify(req.body) || "-");
 //Cors
 app.use(cors());
 
+//Static
+app.use(express.static('dist'));
+
 // Use express
 app.use(express.json());
 
@@ -29,34 +32,15 @@ app.use(
   morgan(':id :method :url :body :response-time ')
 );
 
-let persons = [
-  {
-    id: 1,
-    name: "Arto Hellas",
-    number: "040-123456",
-  },
-  {
-    id: 2,
-    name: "Ada Lovelace",
-    number: "39-44-5323523",
-  },
-  {
-    id: 3,
-    name: "Israel Gualan",
-    number: "0988389058",
-  },
-  {
-    id: 4,
-    name: "Mary Poppendieck",
-    number: "39-23-6423122",
-  },
-];
+const person_data = fs.readFileSync('data.json', 'utf-8');
 
 const generateId = () => {
   const maxId =
     persons.length > 0 ? Math.max(...persons.map((item) => item.id)) : 0;
   return maxId + 1;
 };
+
+let persons = JSON.parse(person_data);
 
 app.get("/api/persons", (req, res) => {
   return res.json(persons);
@@ -80,11 +64,30 @@ app.get("/api/persons/:id", (req, res) => {
 
 app.delete("/api/persons/:id", (req, res) => {
   const id = Number(req.params.id);
-  const person = persons.find((item) => item.id !== id);
+  const person = persons.filter((item) => item.id !== id);
+  fs.writeFileSync('data.json', JSON.stringify(person), 'utf-8');
   return res.status(201).send({
     message: 'User deleted: ' + id,
   });
 });
+
+app.put("/api/persons/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const body = req.body;
+  const index = persons.findIndex((item) => item.id === id);
+  if (index !== -1 ) {
+    persons[index] = {...persons[index], ...body}
+    fs.writeFileSync('data.json', JSON.stringify(persons), 'utf-8');
+    return res.status(200).send({
+      message: 'user update: ' + id,
+    })
+  } else {
+    return res.status(404).send({
+      message: 'user not found: ' + id,
+    });
+  }
+});
+
 
 app.post("/api/persons", (req, res) => {
   const body = req.body || {};
@@ -103,6 +106,7 @@ app.post("/api/persons", (req, res) => {
     };
 
     persons = persons.concat(person);
+    fs.writeFileSync('data.json', JSON.stringify(persons), 'utf-8');
     return res.json(person);
   } else {
     return res.status(400).send({
