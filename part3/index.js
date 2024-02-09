@@ -1,18 +1,22 @@
-const express = require("express");
-const cors = require("cors");
-const morgan = require("morgan");
-const fs = require("fs");
-const { v4: uuidv4 } = require("uuid");
+//Enviroment
+require('dotenv').config();
 
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const { v4: uuidv4 } = require('uuid');
+
+//Module
+const Person = require('./mongo');
 
 // Use express
 const app = express();
 
 //Create Token Id
-morgan.token('id', (req) => (req.id))
+morgan.token('id', (req) => req.id);
 
 // Create el body
-morgan.token('body', (req) => JSON.stringify(req.body) || "-");
+morgan.token('body', (req) => JSON.stringify(req.body) || '-');
 
 //Cors
 app.use(cors());
@@ -26,97 +30,107 @@ app.use(express.json());
 app.use((req, res, next) => {
   req.id = uuidv4();
   next();
-})
-
-app.use(
-  morgan(':id :method :url :body :response-time ')
-);
-
-const person_data = fs.readFileSync('data.json', 'utf-8');
-
-const generateId = () => {
-  const maxId =
-    persons.length > 0 ? Math.max(...persons.map((item) => item.id)) : 0;
-  return maxId + 1;
-};
-
-let persons = JSON.parse(person_data);
-
-app.get("/api/persons", (req, res) => {
-  return res.json(persons);
 });
 
-app.get("/info", (req, res) => {
-    const date = new Date();
-    const info = persons.length;
-    return res.send(`<div><p>Phonebook has info for ${info} people</p><br/>${date}</div>`)
-  });
+app.use(morgan(':id :method :url :body :response-time '));
 
-app.get("/api/persons/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const person = persons.find((item) => item.id === id);
-  if (person) {
-    res.send(person);
-  } else {
-    res.send(404).end();
-  }
-});
-
-app.delete("/api/persons/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const person = persons.filter((item) => item.id !== id);
-  fs.writeFileSync('data.json', JSON.stringify(person), 'utf-8');
-  return res.status(201).send({
-    message: 'User deleted: ' + id,
+app.get('/api/persons', (req, res) => {
+  Person.find({}).then((persons) => {
+    res.json(persons);
+  }).catch((err) => {
+    console.log(err);
+    res.status(500).end();
   });
 });
 
-app.put("/api/persons/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const body = req.body;
-  const index = persons.findIndex((item) => item.id === id);
-  if (index !== -1 ) {
-    persons[index] = {...persons[index], ...body}
-    fs.writeFileSync('data.json', JSON.stringify(persons), 'utf-8');
-    return res.status(200).send({
-      message: 'user update: ' + id,
+app.get('/info', (req, res) => {
+  const date = new Date();
+  Person.find({}).then((response) => {
+    return res.send(
+      `<div><p>Phonebook has info for ${response.length} people</p><br/>${date}</div>`
+    );
+  }).catch((err) => {
+    console.log(err);
+    res.status(500).end();
+  });
+});
+
+app.get('/api/persons/:id', (req, res) => {
+  Person.findById(req.params.id)
+    .then((response) => {
+      response ? res.json(response) : res.status(404).send({
+        message: 'user not found',
+      });
     })
+    .catch((err) => {
+      res.status(500).send({
+        message: err.message,
+      });
+    });
+});
+
+app.delete('/api/persons/:id', (req, res) => {
+  Person.findByIdAndDelete(req.params.id)
+    .then((response) => {
+      response ? res.status(204).end() : res.status(404).send({
+        message: 'user not found',
+      });
+    })
+    .catch((err) => {
+      res.status(500).send({
+        message: err.message,
+      });
+    });
+});
+
+app.put('/api/persons/:id', (req, res) => {
+  Person.findByIdAndUpdate(req.params.id, {
+    name: req.body.name,
+    number: req.body.number,
+  }, { new: true })
+    .then((response) => {
+      res.json(response);
+    })
+    .catch((err) => {
+      res.status(500).send({
+        message: err.message,
+      });
+    });
+});
+
+app.post('/api/persons', async (req, res) => {
+  const body = req.body || {};
+  const name = req.body.name;
+  const searchPerson = await Person.find({ name });
+  if (searchPerson.length === 0) {
+    if (!body.name) {
+      return res.status(404).send({
+        message: 'name missing',
+      });
+    }
+    const person = new Person({
+      name: body.name,
+      number: body.number,
+    });
+    person
+      .save()
+      .then((response) => {
+        res.json(response);
+      })
+      .catch((err) => {
+        res.status(500).send({
+          message: err.message,
+        });
+      });
   } else {
-    return res.status(404).send({
-      message: 'user not found: ' + id,
+    return res.status(400).send({
+      message: 'the name already exists',
     });
   }
 });
 
-
-app.post("/api/persons", (req, res) => {
-  const body = req.body || {};
-  const searchPerson = persons.some((item) => item.name === body.name)
-  if (!searchPerson) {
-    if (!body.name) {
-      return res.status(404).send({
-        message : "name missing",
-      });
-    }
-
-    const person = {
-      name: body.name,
-      number: body.number,
-      id: generateId(),
-    };
-
-    persons = persons.concat(person);
-    fs.writeFileSync('data.json', JSON.stringify(persons), 'utf-8');
-    return res.json(person);
-  } else {
-    return res.status(400).send({
-      message: "the name already exists"
-    })
-  }
-
-});
-
-const PORT = process.env.PORT || 3001 ;
+// eslint-disable-next-line no-undef
+const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
   console.log(`Server running on port http://localhost:${PORT}`);
